@@ -9,6 +9,7 @@ import {
   type Mode,
   type Role,
   analyzePair,
+  buildPairPromises,
   buildShareText,
   completionRate,
   getAxis,
@@ -73,6 +74,24 @@ export default function Home() {
     if (!managerResult || !memberResult) return [];
     return analyzePair(managerResult, memberResult);
   }, [managerResult, memberResult]);
+
+  const shareUrl = useMemo(() => {
+    if (!showResult) return "";
+    const params = new URLSearchParams();
+    if (mode === "solo" && soloResult) {
+      params.set("mode", "solo");
+      params.set("role", soloRole);
+      params.set("character", soloResult.character.id);
+    }
+    if (mode === "pair" && managerResult && memberResult) {
+      params.set("mode", "pair");
+      params.set("manager", managerResult.character.id);
+      params.set("member", memberResult.character.id);
+      params.set("themes", pairInsights.slice(0, 3).map((item) => item.axis).join(","));
+    }
+    if (!params.toString()) return "";
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  }, [managerResult, memberResult, mode, pairInsights, showResult, soloResult, soloRole]);
 
   const setAnswer = (questionId: string, value: Likert) => {
     setCopied(false);
@@ -263,7 +282,8 @@ export default function Home() {
           role={soloRole}
           copied={copied}
           onCopy={async () => {
-            await navigator.clipboard.writeText(buildShareText(soloResult, soloRole));
+            const text = `${buildShareText(soloResult, soloRole)}\n${shareUrl}`;
+            await navigator.clipboard.writeText(text);
             setCopied(true);
           }}
           onReset={reset}
@@ -278,11 +298,12 @@ export default function Home() {
             const text = `上司は${managerResult.character.name}型、部下は${memberResult.character.name}型。関係改善テーマは${pairInsights
               .slice(0, 2)
               .map((insight) => getAxis(insight.axis).shortName)
-              .join("・")} #偉人マネジメント診断`;
+              .join("・")} #偉人マネジメント診断\n${shareUrl}`;
             await navigator.clipboard.writeText(text);
             setCopied(true);
           }}
           onReset={reset}
+          shareUrl={shareUrl}
         />
       ) : null}
     </main>
@@ -357,12 +378,14 @@ function ResultView({
   copied,
   onCopy,
   onReset,
+  shareUrl,
 }: {
   result: ReturnType<typeof scoreAnswers>;
   role: Role;
   copied: boolean;
   onCopy: () => void;
   onReset: () => void;
+  shareUrl: string;
 }) {
   return (
     <section className="space-y-6">
@@ -376,6 +399,7 @@ function ResultView({
             </h2>
             <p className="text-base leading-8 text-stone-700">{result.character.description}</p>
             <div className="rounded-2xl bg-stone-50 p-4 text-sm leading-7 text-stone-700">{result.caution}</div>
+            {shareUrl && <p className="rounded-2xl bg-amber-50 p-3 text-xs text-amber-900">共有URL: {shareUrl}</p>}
             <div className="flex flex-wrap gap-3">
               <button type="button" onClick={onCopy} className="rounded-2xl bg-stone-950 px-5 py-3 font-bold text-white">
                 {copied ? "コピー済み" : "シェア文をコピー"}
@@ -407,6 +431,7 @@ function PairResultView({
   onCopy: () => void;
   onReset: () => void;
 }) {
+  const promises = buildPairPromises(insights);
   return (
     <section className="space-y-6">
       <div className="rounded-[2rem] border border-stone-200 bg-white p-6 shadow-xl shadow-stone-900/5 md:p-8">
@@ -432,6 +457,17 @@ function PairResultView({
       <div className="grid gap-6 md:grid-cols-2">
         <CharacterCard result={managerResult} role="manager" />
         <CharacterCard result={memberResult} role="member" />
+      </div>
+
+      <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 shadow-xl shadow-amber-900/10 md:p-8">
+        <h3 className="text-2xl font-black text-amber-950">今日から変える3つの約束</h3>
+        <ul className="mt-4 space-y-3">
+          {promises.map((promise) => (
+            <li key={promise} className="rounded-2xl bg-white/80 p-4 text-sm font-bold leading-7 text-amber-900">
+              {promise}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="rounded-[2rem] border border-stone-200 bg-white p-6 shadow-xl shadow-stone-900/5 md:p-8">
@@ -463,10 +499,14 @@ function CharacterCard({ result, role }: { result: ReturnType<typeof scoreAnswer
         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">{roleLabel(role)}タイプ</span>
         <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-stone-700">一致度 {result.affinity}%</span>
       </div>
-      <div className="mt-6 rounded-3xl border border-dashed border-amber-300 bg-white/70 p-6 text-center">
-        <p className="text-xs font-bold text-stone-500">画像プレースホルダー</p>
-        <p className="mt-2 text-sm leading-6 text-stone-600">後からキャラクター絵を追加</p>
-      </div>
+      {result.character.imageSrc ? (
+        <img src={result.character.imageSrc} alt={`${result.character.name}イメージ`} className="mt-6 h-48 w-full rounded-3xl object-cover" />
+      ) : (
+        <div className="mt-6 rounded-3xl border border-dashed border-amber-300 bg-white/70 p-6 text-center">
+          <p className="text-xs font-bold text-stone-500">画像プレースホルダー</p>
+          <p className="mt-2 text-sm leading-6 text-stone-600">後からキャラクター絵を追加</p>
+        </div>
+      )}
       <h3 className="mt-5 text-3xl font-black text-stone-950">{result.character.name}</h3>
       <p className="mt-1 text-sm font-bold text-amber-800">
         {result.character.region}・{result.character.era}

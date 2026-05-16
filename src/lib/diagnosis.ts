@@ -48,6 +48,7 @@ export type HistoricalCharacter = {
   catchphrase: string;
   description: string;
   profile: AxisLevels;
+  imageSrc?: string;
   imagePromptSeed: string;
 };
 
@@ -662,5 +663,14 @@ export function analyzePair(manager: DiagnosisResult, member: DiagnosisResult): 
   return AXIS_IDS.map((axis) => pairMessage(axis, manager.levels[axis], member.levels[axis])).sort((a, b) => {
     const order = { friction: 0, watch: 1, smooth: 2 } as const;
     return order[a.severity] - order[b.severity];
+  });
+}
+
+export function buildPairPromises(insights: PairInsight[]): string[] {
+  const top = insights.filter((insight) => insight.severity !== "smooth").slice(0, 3);
+  const seeds = top.length > 0 ? top : insights.slice(0, 3);
+  return seeds.map((insight) => {
+    const axis = getAxis(insight.axis);
+    return `「${axis.shortName}」で${insight.talkScript.replace(/^「|」$/g, "")}`;
   });
 }
